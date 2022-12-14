@@ -128,6 +128,7 @@ git_repos = {
     "pythondata-cpu-serv":         GitRepo(url="https://github.com/litex-hub/"),
     "pythondata-cpu-vexriscv":     GitRepo(url="https://github.com/litex-hub/"),
     "pythondata-cpu-vexriscv-smp": GitRepo(url="https://github.com/litex-hub/", clone="recursive"),
+    "pythondata-cpu-scariv":       GitRepo(url="https://github.com/msyksphinz-self/", clone="recursive"),
 }
 
 # Installs -----------------------------------------------------------------------------------------
