@@ -55,6 +55,7 @@ class TestCPU(unittest.TestCase):
             "cv32e41p",     # (riscv   / softcore) -> Broken?
             "cva5",         # (riscv   / softcore) -> Needs to be tested.
             "cva6",         # (riscv   / softcore) -> Needs to be tested.
+            "scariv",       # (riscv   / softcore) -> Needs to be tested.
             "eos_s3",       # (arm     / hardcore) -> Hardcore.
             "gowin_emcu",   # (arm     / hardcore) -> Hardcore.
             "ibex",         # (riscv   / softcore) -> Broken since 2022.11.12.
