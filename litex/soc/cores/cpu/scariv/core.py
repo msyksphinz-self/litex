@@ -7,6 +7,7 @@
 
 import os
 import re
+import subprocess
 
 from migen import *
 
@@ -41,12 +42,12 @@ def add_manifest_sources(platform, manifest):
     basedir = get_data_mod("cpu", "scariv").data_location
     with open(os.path.join(basedir, manifest), 'r') as f:
         for l in f:
-            res = re.search('\$\{SCARIV_REPO_DIR\}/(.+)', l)
+            res = re.search('(.+)', l)
             if res and not re.match('//', l):
                 if re.match('\+incdir\+', l):
                     platform.add_verilog_include_path(os.path.join(basedir, res.group(1)))
                 else:
-                    platform.add_source(os.path.join(basedir, res.group(1)))
+                    platform.add_source(os.path.join(basedir, "src", res.group(1)))
 
 # SCARIV ---------------------------------------------------------------------------------------------
 
@@ -86,8 +87,9 @@ class ScariV(CPU):
         self.reset        = Signal()
         self.interrupt    = Signal(32)
         # Peripheral bus (Connected to main SoC's bus).
-        axi_if = axi.AXIInterface(data_width=64, address_width=32, id_width=4)
-        self.periph_buses = [axi_if]
+        axi_if = axi.AXIInterface(data_width=256, address_width=32,       id_width=5)
+        axi_fetch_if = axi.AXIInterface(data_width=256, address_width=32, id_width=5)
+        self.periph_buses = [axi_if, axi_fetch_if]
         # Memory buses (Connected directly to LiteDRAM).
         self.memory_buses = []
 
@@ -96,66 +98,48 @@ class ScariV(CPU):
         # CPU Instance.
         self.cpu_params = dict(
             # Clk / Rst.
-            i_clk_i       = ClockSignal("sys"),
-            i_rst_n       = ~ResetSignal("sys") | self.reset,
+            i_i_clk       = ClockSignal("sys"),
+            i_i_reset_n       = ~ResetSignal("sys") | self.reset,
 
-            # Interrupts
-            i_irq_sources = self.interrupt,
+            # # Interrupts
+            # i_irq_sources = self.interrupt,
 
             # AXI interface.
-            o_AWVALID_o   = axi_if.aw.valid,
-            i_AWREADY_i   = axi_if.aw.ready,
-            o_AWID_o      = axi_if.aw.id,
-            o_AWADDR_o    = axi_if.aw.addr,
-            o_AWLEN_o     = axi_if.aw.len,
-            o_AWSIZE_o    = axi_if.aw.size,
-            o_AWBURST_o   = axi_if.aw.burst,
-            o_AWLOCK_o    = axi_if.aw.lock,
-            o_AWCACHE_o   = axi_if.aw.cache,
-            o_AWPROT_o    = axi_if.aw.prot,
-            o_AWQOS_o     = axi_if.aw.qos,
-            o_AWREGION_o  = Open(),
-            o_AWUSER_o    = Open(),
+	    o_o_l1d_req_valid   = axi_if.ar.valid,
+	    o_o_l1d_req_addr    = axi_if.ar.addr,
+	    o_o_l1d_req_tag     = axi_if.ar.id,
+	    i_i_l1d_req_ready   = axi_if.ar.ready,
 
-            o_WVALID_o    = axi_if.w.valid,
-            i_WREADY_i    = axi_if.w.ready,
-            o_WDATA_o     = axi_if.w.data,
-            o_WSTRB_o     = axi_if.w.strb,
-            o_WLAST_o     = axi_if.w.last,
-            o_WUSER_o     = Open(),
+	    i_i_l1d_resp_valid = axi_if.r.valid,
+	    i_i_l1d_resp_tag   = axi_if.r.id,
+	    i_i_l1d_resp_data  = axi_if.r.data,
+	    o_o_l1d_resp_ready = axi_if.r.ready,
 
-            i_BVALID_i    = axi_if.b.valid,
-            o_BREADY_o    = axi_if.b.ready,
-            i_BID_i       = axi_if.b.id,
-            i_BRESP_i     = axi_if.b.resp,
-            i_BUSER_i     = 0,
-
-            o_ARVALID_o   = axi_if.ar.valid,
-            i_ARREADY_i   = axi_if.ar.ready,
-            o_ARID_o      = axi_if.ar.id,
-            o_ARADDR_o    = axi_if.ar.addr,
-            o_ARLEN_o     = axi_if.ar.len,
-            o_ARSIZE_o    = axi_if.ar.size,
-            o_ARBURST_o   = axi_if.ar.burst,
-            o_ARLOCK_o    = axi_if.ar.lock,
-            o_ARCACHE_o   = axi_if.ar.cache,
-            o_ARPROT_o    = axi_if.ar.prot,
-            o_ARQOS_o     = axi_if.ar.qos,
-            o_ARUSER_o    = Open(),
-            o_ARREGION_o  = Open(),
-
-            i_RVALID_i    = axi_if.r.valid,
-            o_RREADY_o    = axi_if.r.ready,
-            i_RID_i       = axi_if.r.id,
-            i_RDATA_i     = axi_if.r.data,
-            i_RRESP_i     = axi_if.r.resp,
-            i_RLAST_i     = axi_if.r.last,
-            i_RUSER_i     = 0,
+            o_o_ic_req_valid = axi_fetch_if.ar.valid,
+            i_i_ic_req_ready = axi_fetch_if.ar.ready,
+            o_o_ic_req_tag   = axi_fetch_if.ar.id,
+            o_o_ic_req_addr  = axi_fetch_if.ar.addr,
         )
 
         # Add Verilog sources.
         # TODO: use Flist.cv64a6_imafdc_sv39 and Flist.cv32a6_imac_sv0 instead
+        basedir = get_data_mod("cpu", "scariv").data_location
+        platform.add_source(os.path.join(basedir, "src", "litex_defines.svh"))
+        platform.add_source(os.path.join(basedir, "src", "riscv_common_pkg.sv"))
+        platform.add_source(os.path.join(basedir, "src", "riscv_fpu_imafdc_pkg.sv"))
+        platform.add_source(os.path.join(basedir, "src", "riscv64_pkg.sv"))
+        platform.add_source(os.path.join(basedir, "src", "scariv_standard_conf_pkg.sv"))
+        add_manifest_sources(platform, "src/fpnew.vf")
         add_manifest_sources(platform, "src/filelist.vf")
+        platform.add_verilog_include_path(os.path.join(basedir, "src", "fpnew", "src", "common_cells", "include"))
+        platform.add_source(os.path.join(basedir, "src", "decoder_inst_cat.sv"))
+        platform.add_source(os.path.join(basedir, "src", "decoder_alu_ctrl.sv"))
+        platform.add_source(os.path.join(basedir, "src", "decoder_lsu_ctrl.sv"))
+        platform.add_source(os.path.join(basedir, "src", "decoder_bru_ctrl.sv"))
+        platform.add_source(os.path.join(basedir, "src", "decoder_csu_ctrl.sv"))
+        platform.add_source(os.path.join(basedir, "src", "decoder_fpu_ctrl.sv"))
+        platform.add_source(os.path.join(basedir, "src", "decoder_reg.sv"))
+        platform.add_source(os.path.join(basedir, "src", "pma_map.sv"))
 
     def add_jtag(self, pads):
         from migen.fhdl.specials import Tristate
@@ -184,4 +168,8 @@ class ScariV(CPU):
 
     def do_finalize(self):
         assert hasattr(self, "reset_address")
-        self.specials += Instance("scariv_wrapper", **self.cpu_params)
+        basedir = get_data_mod("cpu", "scariv").data_location
+        subprocess.check_call("make -C {basedir}/verilator_sim .config_design_xlen64_flen64".format(
+            basedir = basedir),
+                              shell=True)
+        self.specials += Instance("scariv_tile_wrapper", **self.cpu_params)
