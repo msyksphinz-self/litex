@@ -76,9 +76,10 @@ class ScariV(CPU):
     @property
     def mem_map(self):
         return {
-            "rom"  : 0x1000_0000,
-            "sram" : 0x2000_0000,
-            "csr"  : 0x8000_0000,
+            "rom"       : 0x1000_0000,
+            "sram"      : 0x2000_0000,
+            "main_sram" : 0x4000_0000,
+            "csr"       : 0xf000_0000,
         }
 
     def __init__(self, platform, variant="standard"):
@@ -87,9 +88,9 @@ class ScariV(CPU):
         self.reset        = Signal()
         self.interrupt    = Signal(32)
         # Peripheral bus (Connected to main SoC's bus).
-        axi_if = axi.AXIInterface(data_width=256, address_width=32,       id_width=5)
-        axi_fetch_if = axi.AXIInterface(data_width=256, address_width=32, id_width=5)
-        self.periph_buses = [axi_if, axi_fetch_if]
+        axi_data_if = axi.AXIInterface(data_width=128, address_width=32,       id_width=5)
+        axi_fetch_if = axi.AXIInterface(data_width=128, address_width=32, id_width=5)
+        self.periph_buses = [axi_data_if, axi_fetch_if]
         # Memory buses (Connected directly to LiteDRAM).
         self.memory_buses = []
 
@@ -105,21 +106,30 @@ class ScariV(CPU):
             # i_irq_sources = self.interrupt,
 
             # AXI interface.
-	    o_o_l1d_req_valid   = axi_if.ar.valid,
-	    o_o_l1d_req_addr    = axi_if.ar.addr,
-	    o_o_l1d_req_tag     = axi_if.ar.id,
-	    i_i_l1d_req_ready   = axi_if.ar.ready,
+	    o_o_l1d_req_valid   = axi_data_if.ar.valid,
+	    o_o_l1d_req_addr    = axi_data_if.ar.addr,
+	    o_o_l1d_req_tag     = axi_data_if.ar.id,
+	    i_i_l1d_req_ready   = axi_data_if.ar.ready,
 
-	    i_i_l1d_resp_valid = axi_if.r.valid,
-	    i_i_l1d_resp_tag   = axi_if.r.id,
-	    i_i_l1d_resp_data  = axi_if.r.data,
-	    o_o_l1d_resp_ready = axi_if.r.ready,
+	    i_i_l1d_resp_valid = axi_data_if.r.valid,
+	    i_i_l1d_resp_tag   = axi_data_if.r.id,
+	    i_i_l1d_resp_data  = axi_data_if.r.data,
+	    o_o_l1d_resp_ready = axi_data_if.r.ready,
 
             o_o_ic_req_valid = axi_fetch_if.ar.valid,
             i_i_ic_req_ready = axi_fetch_if.ar.ready,
             o_o_ic_req_tag   = axi_fetch_if.ar.id,
             o_o_ic_req_addr  = axi_fetch_if.ar.addr,
+
+	    i_i_ic_resp_valid = axi_fetch_if.r.valid,
+	    i_i_ic_resp_tag   = axi_fetch_if.r.id,
+	    i_i_ic_resp_data  = axi_fetch_if.r.data,
+	    o_o_ic_resp_ready = axi_fetch_if.r.ready,
         )
+
+        self.comb += axi_fetch_if.ar.len.eq(0)
+        self.comb += axi_fetch_if.ar.size.eq(4)  # 128
+        self.comb += axi_fetch_if.ar.burst.eq(0)
 
         # Add Verilog sources.
         # TODO: use Flist.cv64a6_imafdc_sv39 and Flist.cv32a6_imac_sv0 instead
@@ -128,7 +138,7 @@ class ScariV(CPU):
         platform.add_source(os.path.join(basedir, "src", "riscv_common_pkg.sv"))
         platform.add_source(os.path.join(basedir, "src", "riscv_fpu_imafdc_pkg.sv"))
         platform.add_source(os.path.join(basedir, "src", "riscv64_pkg.sv"))
-        platform.add_source(os.path.join(basedir, "src", "scariv_standard_conf_pkg.sv"))
+        platform.add_source(os.path.join(basedir, "src", "scariv_tiny_conf_pkg.sv"))
         add_manifest_sources(platform, "src/fpnew.vf")
         add_manifest_sources(platform, "src/filelist.vf")
         platform.add_verilog_include_path(os.path.join(basedir, "src", "fpnew", "src", "common_cells", "include"))
