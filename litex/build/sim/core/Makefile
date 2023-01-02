@@ -36,6 +36,7 @@ $(OBJS_SIM): %.o: $(SRC_DIR)/%.c | mkdir
 .PHONY: sim
 sim: $(OBJS_SIM) | mkdir
 	verilator -Wno-fatal -O3 $(CC_SRCS) --top-module sim --exe \
+		--compiler clang \
 		-DPRINTF_COND=0 \
 		$(SRCS_SIM_CPP) $(OBJS_SIM) \
 		--top-module sim \
@@ -43,19 +44,21 @@ sim: $(OBJS_SIM) | mkdir
 		-CFLAGS "$(CFLAGS) -I$(SRC_DIR)" \
 		-LDFLAGS "$(LDFLAGS)" \
 		--trace \
-		$(if $(TRACE_FST), --trace-fst,) \
-		$(if $(COVERAGE), --coverage,) \
+		$(if $(TRACE_FST), --trace-fst --trace-params --trace-structs --trace-underscore,) \
 		--unroll-count 256 \
 		--output-split 5000 \
-		--output-split-cfuncs 500 \
-		--output-split-ctrace 500 \
+		$(if $(COVERAGE), --coverage,) \
 		$(INC_DIR) \
 		-Wno-BLKANDNBLK \
 		-Wno-WIDTH \
 		-Wno-COMBDLY \
 		-Wno-CASEINCOMPLETE \
 		--relative-includes
-	make -j$(JOBS) -C $(OBJ_DIR) -f Vsim.mk Vsim
+	make -j16 -C $(OBJ_DIR) -f Vsim.mk OBJCACHE=ccache CXX=clang++ LINK=clang++ Vsim
+
+#		--output-split-cfuncs 500 \
+#		--output-split-ctrace 500 \
+
 
 .PHONY: modules
 modules:

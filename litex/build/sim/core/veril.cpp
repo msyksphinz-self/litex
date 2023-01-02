@@ -73,6 +73,10 @@ extern "C" void litex_sim_tracer_dump()
 
   if (dump_enabled && tfp_start <= main_time && main_time <= tfp_end) {
     tfp->dump((vluint64_t) main_time);
+    tfp->flush ();
+  }
+  if (dump_enabled && main_time > tfp_end) {
+    tfp->close();
   }
 }
 
