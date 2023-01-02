@@ -76,7 +76,7 @@ class ScariV(CPU):
     @property
     def mem_map(self):
         return {
-            "rom"       : 0x1000_0000,
+            "rom"       : 0x0000_0000,
             "sram"      : 0x2000_0000,
             "main_sram" : 0x4000_0000,
             "csr"       : 0xf000_0000,
@@ -88,9 +88,13 @@ class ScariV(CPU):
         self.reset        = Signal()
         self.interrupt    = Signal(32)
         # Peripheral bus (Connected to main SoC's bus).
-        axi_data_if = axi.AXIInterface(data_width=128, address_width=32,       id_width=5)
+        axi_data_if  = axi.AXIInterface(data_width=128, address_width=32, id_width=5)
         axi_fetch_if = axi.AXIInterface(data_width=128, address_width=32, id_width=5)
-        self.periph_buses = [axi_data_if, axi_fetch_if]
+
+        fetch_wb_if = wishbone.Interface(data_width=128, adr_width=32-log2_int(128//8))
+        data_wb_if  = wishbone.Interface(data_width=128, adr_width=32-log2_int(128//8))
+
+        self.periph_buses = [fetch_wb_if, data_wb_if]
         # Memory buses (Connected directly to LiteDRAM).
         self.memory_buses = []
 
@@ -130,6 +134,13 @@ class ScariV(CPU):
         self.comb += axi_fetch_if.ar.len.eq(0)
         self.comb += axi_fetch_if.ar.size.eq(4)  # 128
         self.comb += axi_fetch_if.ar.burst.eq(0)
+
+        # Adapt AXI interfaces to Wishbone.
+        fetch_a2w = axi.AXI2Wishbone(axi_fetch_if, fetch_wb_if, base_address=0)
+        self.submodules += fetch_a2w
+
+        data_a2w  = axi.AXI2Wishbone(axi_data_if, data_wb_if, base_address=0)
+        self.submodules += data_a2w
 
         # Add Verilog sources.
         # TODO: use Flist.cv64a6_imafdc_sv39 and Flist.cv32a6_imac_sv0 instead
@@ -174,7 +185,7 @@ class ScariV(CPU):
 
     def set_reset_address(self, reset_address):
         self.reset_address = reset_address
-        assert reset_address == 0x1000_0000, "cpu_reset_addr hardcoded in during elaboration!"
+        # assert reset_address == 0x1000_0000, "cpu_reset_addr hardcoded in during elaboration!"
 
     def do_finalize(self):
         assert hasattr(self, "reset_address")
