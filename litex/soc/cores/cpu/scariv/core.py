@@ -88,59 +88,73 @@ class ScariV(CPU):
         self.reset        = Signal()
         self.interrupt    = Signal(32)
         # Peripheral bus (Connected to main SoC's bus).
-        axi_data_if  = axi.AXIInterface(data_width=128, address_width=32, id_width=5)
-        axi_fetch_if = axi.AXIInterface(data_width=128, address_width=32, id_width=5)
+        axi_if  = axi.AXIInterface(data_width=128, address_width=32, id_width=7)
+        wb_if  = wishbone.Interface(data_width=128, adr_width=32-log2_int(128//8))
 
-        fetch_wb_if = wishbone.Interface(data_width=128, adr_width=32-log2_int(128//8))
-        data_wb_if  = wishbone.Interface(data_width=128, adr_width=32-log2_int(128//8))
-
-        self.periph_buses = [fetch_wb_if, data_wb_if]
+        self.periph_buses = [wb_if]
         # Memory buses (Connected directly to LiteDRAM).
         self.memory_buses = []
-
-        # # #
 
         # CPU Instance.
         self.cpu_params = dict(
             # Clk / Rst.
             i_i_clk       = ClockSignal("sys"),
-            i_i_reset_n       = ~ResetSignal("sys") | self.reset,
+            i_i_reset_n   = ~ResetSignal("sys") | self.reset,
 
             # # Interrupts
             # i_irq_sources = self.interrupt,
 
             # AXI interface.
-	    o_o_l1d_req_valid   = axi_data_if.ar.valid,
-	    o_o_l1d_req_addr    = axi_data_if.ar.addr,
-	    o_o_l1d_req_tag     = axi_data_if.ar.id,
-	    i_i_l1d_req_ready   = axi_data_if.ar.ready,
+            o_axi_if_aw_valid   = axi_if.aw.valid     ,
+            i_axi_if_aw_ready   = axi_if.aw.ready     ,
+            o_axi_if_aw_last    = axi_if.aw.last      ,
+            o_axi_if_aw_addr    = axi_if.aw.addr      ,
+            o_axi_if_aw_burst   = axi_if.aw.burst     ,
+            o_axi_if_aw_len     = axi_if.aw.len       ,
+            o_axi_if_aw_size    = axi_if.aw.size      ,
+            o_axi_if_aw_lock    = axi_if.aw.lock      ,
+            o_axi_if_aw_prot    = axi_if.aw.prot      ,
+            o_axi_if_aw_cache   = axi_if.aw.cache     ,
+            o_axi_if_aw_qos     = axi_if.aw.qos       ,
+            o_axi_if_aw_region  = axi_if.aw.region    ,
+            o_axi_if_aw_id      = axi_if.aw.id        ,
 
-	    i_i_l1d_resp_valid = axi_data_if.r.valid,
-	    i_i_l1d_resp_tag   = axi_data_if.r.id,
-	    i_i_l1d_resp_data  = axi_data_if.r.data,
-	    o_o_l1d_resp_ready = axi_data_if.r.ready,
+            o_axi_if_w_valid    = axi_if.w.valid      ,
+            i_axi_if_w_ready    = axi_if.w.ready      ,
+            o_axi_if_w_last     = axi_if.w.last       ,
+            o_axi_if_w_data     = axi_if.w.data       ,
+            o_axi_if_w_strb     = axi_if.w.strb       ,
 
-            o_o_ic_req_valid = axi_fetch_if.ar.valid,
-            i_i_ic_req_ready = axi_fetch_if.ar.ready,
-            o_o_ic_req_tag   = axi_fetch_if.ar.id,
-            o_o_ic_req_addr  = axi_fetch_if.ar.addr,
+            i_axi_if_b_valid    = axi_if.b.valid      ,
+            o_axi_if_b_ready    = axi_if.b.ready      ,
+            i_axi_if_b_resp     = axi_if.b.resp       ,
+            i_axi_if_b_id       = axi_if.b.id         ,
 
-	    i_i_ic_resp_valid = axi_fetch_if.r.valid,
-	    i_i_ic_resp_tag   = axi_fetch_if.r.id,
-	    i_i_ic_resp_data  = axi_fetch_if.r.data,
-	    o_o_ic_resp_ready = axi_fetch_if.r.ready,
+            o_axi_if_ar_valid   = axi_if.ar.valid     ,
+            i_axi_if_ar_ready   = axi_if.ar.ready     ,
+            o_axi_if_ar_last    = axi_if.ar.last      ,
+            o_axi_if_ar_addr    = axi_if.ar.addr      ,
+            o_axi_if_ar_burst   = axi_if.ar.burst     ,
+            o_axi_if_ar_len     = axi_if.ar.len       ,
+            o_axi_if_ar_size    = axi_if.ar.size      ,
+            o_axi_if_ar_lock    = axi_if.ar.lock      ,
+            o_axi_if_ar_prot    = axi_if.ar.prot      ,
+            o_axi_if_ar_cache   = axi_if.ar.cache     ,
+            o_axi_if_ar_qos     = axi_if.ar.qos       ,
+            o_axi_if_ar_region  = axi_if.ar.region    ,
+            o_axi_if_ar_id      = axi_if.ar.id        ,
+
+            i_axi_if_r_valid    = axi_if.r.valid      ,
+            o_axi_if_r_ready    = axi_if.r.ready      ,
+            i_axi_if_r_last     = axi_if.r.last       ,
+            i_axi_if_r_resp     = axi_if.r.resp       ,
+            i_axi_if_r_data     = axi_if.r.data       ,
+            i_axi_if_r_id       = axi_if.r.id         ,
         )
 
-        self.comb += axi_fetch_if.ar.len.eq(0)
-        self.comb += axi_fetch_if.ar.size.eq(4)  # 128
-        self.comb += axi_fetch_if.ar.burst.eq(0)
-
         # Adapt AXI interfaces to Wishbone.
-        fetch_a2w = axi.AXI2Wishbone(axi_fetch_if, fetch_wb_if, base_address=0)
-        self.submodules += fetch_a2w
-
-        data_a2w  = axi.AXI2Wishbone(axi_data_if, data_wb_if, base_address=0)
-        self.submodules += data_a2w
+        a2w = axi.AXI2Wishbone(axi_if, wb_if, base_address=0)
+        self.submodules += a2w
 
         # Add Verilog sources.
         # TODO: use Flist.cv64a6_imafdc_sv39 and Flist.cv32a6_imac_sv0 instead
@@ -183,6 +197,12 @@ class ScariV(CPU):
             o_tdo_oe = tdo_oe,
         )
 
+
+    def add_soc_components(self, soc, soc_region_cls):
+        # Define ISA.
+        soc.add_constant("LITEX_SIMULATION", 1)
+
+
     def set_reset_address(self, reset_address):
         self.reset_address = reset_address
         # assert reset_address == 0x1000_0000, "cpu_reset_addr hardcoded in during elaboration!"
@@ -193,4 +213,4 @@ class ScariV(CPU):
         subprocess.check_call("make -C {basedir}/verilator_sim .config_design_xlen64_flen64".format(
             basedir = basedir),
                               shell=True)
-        self.specials += Instance("scariv_tile_wrapper", **self.cpu_params)
+        self.specials += Instance("scariv_subsystem_axi_wrapper", **self.cpu_params)
