@@ -101,8 +101,8 @@ class ScariV(CPU):
             i_i_clk       = ClockSignal("sys"),
             i_i_reset_n   = ~ResetSignal("sys") | self.reset,
 
-            # # Interrupts
-            # i_irq_sources = self.interrupt,
+            # Interrupts
+            i_i_interrupts = self.interrupt,
 
             # AXI interface.
             o_axi_if_aw_valid   = axi_if.aw.valid     ,
