@@ -57,6 +57,7 @@ extern "C" void litex_sim_init_tracer(void *vsim, long start, long end)
 extern "C" void litex_sim_tracer_dump()
 {
   static int last_enabled = 0;
+  static int last_disabled = 0;
   bool dump_enabled = true;
 
   if (g_sim != nullptr) {
@@ -73,9 +74,12 @@ extern "C" void litex_sim_tracer_dump()
 
   if (dump_enabled && tfp_start <= main_time && main_time <= tfp_end) {
     tfp->dump((vluint64_t) main_time);
-    tfp->flush ();
+    // tfp->flush ();
   }
-  if (dump_enabled && main_time > tfp_end) {
+  if (!last_disabled & dump_enabled && main_time > tfp_end) {
+    last_disabled = 1;
+    printf("<CLOSED OFF>");
+    fflush(stdout);
     tfp->close();
   }
 }
