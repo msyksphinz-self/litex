@@ -102,6 +102,9 @@ bss_loop:
   j bss_loop
 bss_done:
 
+  li a0, 0x880  //880 enable timer + external interrupt sources (until mstatus.MIE is set, they will never trigger an interrupt)
+  csrw mie,a0
+
   call main
 inf_loop:
   j inf_loop

@@ -80,6 +80,8 @@ class ScariV(CPU):
             "sram"      : 0x2000_0000,
             "main_sram" : 0x4000_0000,
             "csr"       : 0xf000_0000,
+            "clint"     : 0x0200_0000,
+            "plic"      : 0x0c00_0000,
         }
 
     def __init__(self, platform, variant="standard"):
