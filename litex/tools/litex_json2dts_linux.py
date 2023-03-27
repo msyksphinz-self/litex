@@ -26,6 +26,7 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
         "vexriscv smp-linux" : "riscv",
         "rocketrv64[imac]"   : "riscv",
         "naxriscv"           : "riscv",
+        "scariv"             : "riscv",
     }
 
     # CPU Parameters -------------------------------------------------------------------------------

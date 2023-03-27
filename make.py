@@ -11,7 +11,7 @@ import sys
 import argparse
 
 from litex.soc.integration.builder import Builder
-from litex.soc.cores.cpu.vexriscv_smp import VexRiscvSMP
+from litex.soc.cores.cpu.scariv import ScariV
 
 from soc_linux import SoCLinux
 
@@ -202,7 +202,7 @@ class KCU105(Board):
 # AESKU40 support -----------------------------------------------------------------------------------
 
 class AESKU40(Board):
-    soc_kwargs = {"uart_baudrate": 115.2e3} 
+    soc_kwargs = {"uart_baudrate": 115.2e3}
     def __init__(self):
         from litex_boards.targets import avnet_aesku40
         Board.__init__(self, avnet_aesku40.BaseSoC, soc_capabilities={
@@ -428,7 +428,7 @@ class ULX4M_LD_V2(Board):
             "framebuffer",
             "video_terminal",
         })
-        
+
 # HADBadge support ---------------------------------------------------------------------------------
 
 class HADBadge(Board):
@@ -655,7 +655,7 @@ class Qmtech_EP4CE15(Board):
             "serial",
         })
 
-# ... and its bigger brother 
+# ... and its bigger brother
 
 class Qmtech_EP4CE55(Board):
     soc_kwargs = {
@@ -778,7 +778,7 @@ supported_boards = {
     }
 
 def main():
-    description = "Linux on LiteX-VexRiscv\n\n"
+    description = "Linux on LiteX-ScariV\n\n"
     description += "Available boards:\n"
     for name in sorted(supported_boards.keys()):
         description += "- " + name + "\n"
@@ -797,7 +797,7 @@ def main():
     parser.add_argument("--spi-data-width", default=8,   type=int,       help="SPI data width (max bits per xfer).")
     parser.add_argument("--spi-clk-freq",   default=1e6, type=int,       help="SPI clock frequency.")
     parser.add_argument("--fdtoverlays",    default="",                  help="Device Tree Overlays to apply.")
-    VexRiscvSMP.args_fill(parser)
+    ScariV.args_fill(parser)
     args = parser.parse_args()
 
     # Board(s) selection ---------------------------------------------------------------------------
@@ -819,14 +819,14 @@ def main():
         # If Wishbone Memory is forced, enabled L2 Cache (if not already):
         if args.with_wishbone_memory:
             soc_kwargs["l2_size"] = max(soc_kwargs["l2_size"], 2048) # Defaults to 2048.
-        # Else if board is configured to use L2 Cache, force use of Wishbone Memory on VexRiscv-SMP.
+        # Else if board is configured to use L2 Cache, force use of Wishbone Memory on ScariV-SMP.
         else:
             args.with_wishbone_memory = soc_kwargs["l2_size"] != 0
 
         if "usb_host" in board.soc_capabilities:
             args.with_coherent_dma = True
 
-        VexRiscvSMP.args_read(args)
+        # ScariV.args_read(args)
 
         # SoC parameters ---------------------------------------------------------------------------
         if args.device is not None:
