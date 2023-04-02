@@ -209,8 +209,8 @@ def litex_setup_init_repos(config="standard", tag=None, dev_mode=False):
             # Clone Repo.
             print_status(f"Cloning {name} Git repository...")
             repo_url = repo.url
-            if dev_mode:
-                repo_url = repo_url.replace("https://github.com/", "git@github.com:")
+            # if dev_mode:
+            #     repo_url = repo_url.replace("https://github.com/", "git@github.com:")
             subprocess.check_call("git clone {url} {options}".format(
                 url     = repo_url + name + ".git",
                 options = "--recursive" if repo.clone == "recursive" else ""
