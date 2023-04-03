@@ -90,7 +90,7 @@ class ScariV(CPU):
         self.reset        = Signal()
         self.interrupt    = Signal(32)
         # Peripheral bus (Connected to main SoC's bus).
-        axi_if  = axi.AXIInterface(data_width=128, address_width=32, id_width=7)
+        axi_if  = axi.AXIInterface(data_width=128, address_width=32, id_width=9)
         wb_if  = wishbone.Interface(data_width=128, adr_width=32-log2_int(128//8))
 
         self.periph_buses = [wb_if]
@@ -161,6 +161,7 @@ class ScariV(CPU):
         # Add Verilog sources.
         # TODO: use Flist.cv64a6_imafdc_sv39 and Flist.cv32a6_imac_sv0 instead
         basedir = get_data_mod("cpu", "scariv").data_location
+        platform.add_source(os.path.join(basedir, "tb",  "sim_pkg.sv"))
         platform.add_source(os.path.join(basedir, "src", "litex_defines.svh"))
         platform.add_source(os.path.join(basedir, "src", "riscv_common_pkg.sv"))
         platform.add_source(os.path.join(basedir, "src", "riscv_fpu_imafdc_pkg.sv"))
@@ -212,7 +213,7 @@ class ScariV(CPU):
     def do_finalize(self):
         assert hasattr(self, "reset_address")
         basedir = get_data_mod("cpu", "scariv").data_location
-        subprocess.check_call("make -C {basedir}/verilator_sim .config_design_xlen64_flen64".format(
+        subprocess.check_call("make -C {basedir}/verilator_sim .config_design_xlen64_flen64 RV_FLEN=64 ISA=imac".format(
             basedir = basedir),
                               shell=True)
         self.specials += Instance("scariv_subsystem_axi_wrapper", **self.cpu_params)
