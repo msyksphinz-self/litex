@@ -14,6 +14,7 @@ from migen import *
 from litex import get_data_mod
 from litex.soc.interconnect import axi
 from litex.soc.interconnect import wishbone
+from litex.soc.integration.soc import SoCRegion
 from litex.soc.cores.cpu import CPU, CPU_GCC_TRIPLE_RISCV64
 
 class Open(Signal): pass
@@ -64,6 +65,29 @@ class ScariV(CPU):
     nop                  = "nop"
     io_regions           = {0x8000_0000: 0x8000_0000} # Origin, Length.
 
+    @staticmethod
+    def args_fill(parser):
+        cpu_group = parser.add_argument_group(title="CPU options")
+        cpu_group.add_argument("--cpu-count",                    default=1,           help="Number of CPU(s) in the cluster.", type=int)
+        cpu_group.add_argument("--with-coherent-dma",            action="store_true", help="Enable Coherent DMA Slave interface.")
+        cpu_group.add_argument("--without-coherent-dma",         action="store_true", help="Disable Coherent DMA Slave interface.")
+        cpu_group.add_argument("--dcache-width",                 default=None,        help="L1 data cache bus width.")
+        cpu_group.add_argument("--icache-width",                 default=None,        help="L1 instruction cache bus width.")
+        cpu_group.add_argument("--dcache-size",                  default=None,        help="L1 data cache size in byte per CPU.")
+        cpu_group.add_argument("--dcache-ways",                  default=None,        help="L1 data cache ways per CPU.")
+        cpu_group.add_argument("--icache-size",                  default=None,        help="L1 instruction cache size in byte per CPU.")
+        cpu_group.add_argument("--icache-ways",                  default=None,        help="L1 instruction cache ways per CPU")
+        cpu_group.add_argument("--aes-instruction",              default=None,        help="Enable AES instruction acceleration.")
+        cpu_group.add_argument("--without-out-of-order-decoder", action="store_true", help="Reduce area at cost of peripheral access speed")
+        cpu_group.add_argument("--with-wishbone-memory",         action="store_true", help="Disable native LiteDRAM interface")
+        cpu_group.add_argument("--wishbone-force-32b",           action="store_true", help="Force the wishbone bus to be 32 bits")
+        cpu_group.add_argument("--with-fpu",                     action="store_true", help="Enable the F32/F64 FPU")
+        cpu_group.add_argument("--cpu-per-fpu",                  default="4",         help="Maximal ratio between CPU count and FPU count. Will instanciate as many FPU as necessary.")
+        cpu_group.add_argument("--with-rvc",                     action="store_true", help="Enable RISC-V compressed instruction support")
+        cpu_group.add_argument("--dtlb-size",                    default=4,           help="Data TLB size.")
+        cpu_group.add_argument("--itlb-size",                    default=4,           help="Instruction TLB size.")
+
+
     # GCC Flags.
     @property
     def gcc_flags(self):
@@ -80,8 +104,8 @@ class ScariV(CPU):
             "sram"      : 0x2000_0000,
             "main_sram" : 0x4000_0000,
             "csr"       : 0xf000_0000,
-            "clint"     : 0x0200_0000,
-            "plic"      : 0x0c00_0000,
+            "clint"     : 0xf200_0000,
+            "plic"      : 0xfc00_0000,
         }
 
     def __init__(self, platform, variant="standard"):
@@ -201,10 +225,21 @@ class ScariV(CPU):
         )
 
 
-    def add_soc_components(self, soc, soc_region_cls):
+    def add_soc_components(self, soc):
         # Define ISA.
         soc.add_constant("LITEX_SIMULATION", 1)
+        soc.add_constant("RV_AMO", 1)
+        soc.add_constant("RV64", 1)
 
+        # Add PLIC Bus (AXILite Slave).
+        self.plicbus = plicbus  = axi.AXILiteInterface(address_width=32, data_width=32)
+        soc.bus.add_slave("plic", self.plicbus, region=SoCRegion(origin=soc.mem_map.get("plic"), size=0x40_0000, cached=False))
+
+        # Add CLINT Bus (AXILite Slave).
+        self.clintbus = clintbus = axi.AXILiteInterface(address_width=32, data_width=32)
+        soc.bus.add_slave("clint", clintbus, region=SoCRegion(origin=soc.mem_map.get("clint"), size=0x1_0000, cached=False))
+
+        self.soc = soc # FIXME: Save SoC instance to retrieve the final mem layout on finalization.
 
     def set_reset_address(self, reset_address):
         self.reset_address = reset_address
