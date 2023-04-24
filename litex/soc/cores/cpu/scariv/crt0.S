@@ -102,6 +102,7 @@ bss_loop:
   j bss_loop
 bss_done:
 
+  call plic_init // initialize external interrupt controller
   li a0, 0x880  //880 enable timer + external interrupt sources (until mstatus.MIE is set, they will never trigger an interrupt)
   csrw mie,a0
 

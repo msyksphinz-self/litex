@@ -29,7 +29,7 @@ void isr(void)
     onetime++;
   }
 }
-#elif defined(__rocket__) || defined(__openc906__)
+#elif defined(__rocket__) || defined(__openc906__) || defined(__scariv__)
 #if defined(__openc906__)
 #define PLIC_EXT_IRQ_BASE 16
 #else
