@@ -129,6 +129,14 @@ _io = [
         Subsignal("i",  Pins(32)),
     ),
 
+    # JTAG.
+    ("jtag", 0,
+        Subsignal("tck", Pins(1)),
+        Subsignal("tms", Pins(1)),
+        Subsignal("tdi", Pins(1)),
+        Subsignal("tdo", Pins(1)),
+    ),
+
     # Video (VGA).
     ("vga", 0,
         Subsignal("hsync", Pins(1)),
@@ -172,6 +180,7 @@ class SimSoC(SoCCore):
         with_video_terminal = False,
         sim_debug             = False,
         trace_reset_on        = False,
+        with_jtag             = False,
         **kwargs):
         platform     = Platform()
         sys_clk_freq = int(1e6)
@@ -233,57 +242,44 @@ class SimSoC(SoCCore):
             else:
                 raise ValueError("Unknown Ethernet PHY model:", ethernet_phy_model)
 
-        # Ethernet and Etherbone -------------------------------------------------------------------
-        if with_ethernet and with_etherbone:
-            etherbone_ip_address = convert_ip(etherbone_ip_address)
-            # Ethernet MAC
-            self.ethmac = LiteEthMAC(phy=self.ethphy, dw=8,
-                interface  = "hybrid",
-                endianness = self.cpu.endianness,
-                hw_mac     = etherbone_mac_address)
-
-            # SoftCPU
-            ethmac_region_size = (self.ethmac.rx_slots.constant + self.ethmac.tx_slots.constant)*self.ethmac.slot_size.constant
-            ethmac_region = SoCRegion(origin=self.mem_map.get("ethmac", None), size=ethmac_region_size, cached=False)
-            self.bus.add_slave(name="ethmac", slave=self.ethmac.bus, region=ethmac_region)
-            if self.irq.enabled:
-                self.irq.add("ethmac", use_loc_if_exists=True)
-            # HW ethernet
-            self.arp  = LiteEthARP(self.ethmac, etherbone_mac_address, etherbone_ip_address, sys_clk_freq, dw=8)
-            self.ip   = LiteEthIP(self.ethmac, etherbone_mac_address, etherbone_ip_address, self.arp.table, dw=8)
-            self.icmp = LiteEthICMP(self.ip, etherbone_ip_address, dw=8)
-            self.udp  = LiteEthUDP(self.ip, etherbone_ip_address, dw=8)
-            # Etherbone
-            self.etherbone = LiteEthEtherbone(self.udp, 1234, mode="master")
-            self.bus.add_master(master=self.etherbone.wishbone.bus)
-
-        # Ethernet ---------------------------------------------------------------------------------
+        # Etherbone with optional Ethernet ---------------------------------------------------------
+        if with_etherbone:
+            self.add_etherbone(
+                phy         = self.ethphy,
+                ip_address  = etherbone_ip_address,
+                mac_address = etherbone_mac_address,
+                data_width  = 8,
+                with_ethmac = with_ethernet,
+            )
+        # Ethernet only ----------------------------------------------------------------------------
         elif with_ethernet:
             # Ethernet MAC
             self.ethmac = ethmac = LiteEthMAC(
                 phy        = self.ethphy,
                 dw         = 64 if ethernet_phy_model == "xgmii" else 32,
                 interface  = "wishbone",
-                endianness = self.cpu.endianness)
-            # Compute Regions size and add it to the SoC.
+                endianness = self.cpu.endianness
+            )
             ethmac_region_size = (ethmac.rx_slots.constant + ethmac.tx_slots.constant)*ethmac.slot_size.constant
             ethmac_region = SoCRegion(origin=self.mem_map.get("ethmac", None), size=ethmac_region_size, cached=False)
             self.bus.add_slave(name="ethmac", slave=ethmac.bus, region=ethmac_region)
+
+            # Add IRQs (if enabled).
             if self.irq.enabled:
                 self.irq.add("ethmac", use_loc_if_exists=True)
-
-        # Etherbone --------------------------------------------------------------------------------
-        elif with_etherbone:
-            self.add_etherbone(
-                phy         = self.ethphy,
-                ip_address  = etherbone_ip_address,
-                mac_address = etherbone_mac_address
-            )
 
         # I2C --------------------------------------------------------------------------------------
         if with_i2c:
             pads = platform.request("i2c", 0)
             self.i2c = I2CMasterSim(pads)
+
+        # JTAG -------------------------------------------------------------------------------------
+        if with_jtag:
+            jtag_pads = platform.request("jtag")
+            self.comb += self.cpu.jtag_clk.eq(jtag_pads.tck)
+            self.comb += self.cpu.jtag_tms.eq(jtag_pads.tms)
+            self.comb += self.cpu.jtag_tdi.eq(jtag_pads.tdi)
+            self.comb += jtag_pads.tdo.eq(self.cpu.jtag_tdo)
 
         # SDCard -----------------------------------------------------------------------------------
         if with_sdcard:
@@ -420,6 +416,9 @@ def sim_args(parser):
     # I2C.
     parser.add_argument("--with-i2c",             action="store_true",     help="Enable I2C support.")
 
+    # JTAG
+    parser.add_argument("--with-jtagremote",      action="store_true", help="Enable jtagremote support")
+
     # GPIO.
     parser.add_argument("--with-gpio",            action="store_true",     help="Enable Tristate GPIO (32 pins).")
 
@@ -506,6 +505,10 @@ def main():
     if args.with_i2c:
         sim_config.add_module("spdeeprom", "i2c")
 
+    # JTAG
+    if args.with_jtagremote:
+        sim_config.add_module("jtagremote", "jtag", args={'port': 44853})
+
     # Video.
     if args.with_video_framebuffer or args.with_video_terminal:
         sim_config.add_module("video", "vga")
@@ -519,6 +522,7 @@ def main():
         with_etherbone         = args.with_etherbone,
         with_analyzer          = args.with_analyzer,
         with_i2c               = args.with_i2c,
+        with_jtag              = args.with_jtagremote,
         with_sdcard            = args.with_sdcard,
         with_spi_flash         = args.with_spi_flash,
         with_gpio              = args.with_gpio,

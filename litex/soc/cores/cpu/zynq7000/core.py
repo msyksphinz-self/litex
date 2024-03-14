@@ -11,6 +11,8 @@ import os
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from litex.gen import *
+
 from litex.soc.interconnect import axi
 
 from litex.soc.cores.cpu import CPU
@@ -31,7 +33,7 @@ class Zynq7000(CPU):
     linker_output_format = "elf32-littlearm"
     nop                  = "nop"
     io_regions           = {0x4000_0000: 0xbc00_0000} # Origin, Length.
-    csr_decode           = False # AXI address is decoded in AXI2Wishbone (target level).
+    csr_decode           = True # AXI address is decoded in AXI2Wishbone, offset needs to be added in Software.
 
     # Memory Mapping.
     @property
@@ -55,7 +57,7 @@ class Zynq7000(CPU):
         # # #
 
         # PS7 Clocking.
-        self.clock_domains.cd_ps7 = ClockDomain()
+        self.cd_ps7 = ClockDomain()
 
         # PS7 (Minimal) ----------------------------------------------------------------------------
         self.ps7_name   = None

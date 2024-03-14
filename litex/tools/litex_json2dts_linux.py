@@ -21,17 +21,17 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
     # CPU Architectures ----------------------------------------------------------------------------
     # CHECKME: Move to core and generate a constant for each CPU?
     cpu_architectures = {
-        "mor1kx"             : "or1k",
-        "marocchino"         : "or1k",
-        "vexriscv smp-linux" : "riscv",
-        "rocketrv64[imac]"   : "riscv",
-        "naxriscv"           : "riscv",
-        "scariv"             : "riscv",
+        "mor1kx"     : "or1k",
+        "marocchino" : "or1k",
+        "vexriscv"   : "riscv",
+        "rocket"     : "riscv",
+        "naxriscv"   : "riscv",
+        "scariv"     : "riscv",
     }
 
     # CPU Parameters -------------------------------------------------------------------------------
     ncpus    = int(d["constants"].get("config_cpu_count", 1))
-    cpu_name = d["constants"].get("config_cpu_human_name")
+    cpu_name = d["constants"].get("config_cpu_name")
     cpu_arch = cpu_architectures[cpu_name]
     cpu_isa  = d["constants"].get("config_cpu_isa", None)
     cpu_mmu  = d["constants"].get("config_cpu_mmu", None)
@@ -69,14 +69,23 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
         initrd_enabled = True
         initrd_size = os.path.getsize(initrd)
 
+    # if json constants contains localip ethernet has been enabled
+    if "localip1" in d["constants"]:
+        localip  = '.'.join([str(d["constants"][f"localip{i}"]) for i in range(1,5)])
+        remoteip = '.'.join([str(d["constants"][f"remoteip{i}"]) for i in range(1,5)])
+        ip       = f" ip={localip}:{remoteip}:{remoteip}:255.255.255.0::eth0:off:::"
+    else:
+        ip = ""
+
     if root_device is None:
         root_device = "ram0"
 
     dts += """
         chosen {{
-            bootargs = "{console} {rootfs}";""".format(
+            bootargs = "{console} {rootfs}{ip}";""".format(
     console = "console=liteuart earlycon=liteuart,0x{:x}".format(d["csr_bases"]["uart"]),
-    rootfs  = "rootwait root=/dev/{}".format(root_device))
+    rootfs  = "rootwait root=/dev/{}".format(root_device),
+    ip      = ip)
 
     if initrd_enabled is True:
         dts += """
@@ -88,6 +97,16 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
     dts += """
         };
 """
+
+    # Clocks ------------------------------------------------------------------------------------------
+
+    dts += """
+        sys_clk: pll {{
+            compatible = "fixed-clock";
+            #clock-cells = <0>;
+            clock-frequency  = <{sys_clk_freq}>;
+        }};
+""".format(sys_clk_freq=d["constants"]["config_clock_frequency"])
 
     # CPU ------------------------------------------------------------------------------------------
 
@@ -132,6 +151,19 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
     i_tlb_size = d["constants"]["config_cpu_itlb_size"],
     i_tlb_ways = d["constants"]["config_cpu_itlb_ways"])
 
+        # Rocket specific attributes
+        if ("rocket" in cpu_name):
+            cpu_isa = cpu_isa.replace("2p0_", "")
+            extra_attr = """
+                hardware-exec-breakpoint-count = <1>;
+                next-level-cache = <&memory>;
+                riscv,pmpgranularity = <4>;
+                riscv,pmpregions = <8>;
+                tlb-split;
+"""
+        else:
+            extra_attr = ""
+
         # CPU(s) Topology.
         cpu_map = ""
         if ncpus > 1:
@@ -165,7 +197,9 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
                 status = "okay";
                 {cache_desc}
                 {tlb_desc}
+                {extra_attr}
                 L{irq}: interrupt-controller {{
+                    #address-cells = <0>;
                     #interrupt-cells = <0x00000001>;
                     interrupt-controller;
                     compatible = "riscv,cpu-intc";
@@ -176,7 +210,8 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
     cpu_isa      = cpu_isa,
     cpu_mmu      = cpu_mmu,
     cache_desc   = cache_desc,
-    tlb_desc     = tlb_desc)
+    tlb_desc     = tlb_desc,
+    extra_attr   = extra_attr)
         dts += """
             {cpu_map}
         }};
@@ -200,7 +235,7 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
     # Memory ---------------------------------------------------------------------------------------
 
     dts += """
-        memory@{main_ram_base:x} {{
+        memory: memory@{main_ram_base:x} {{
             device_type = "memory";
             reg = <0x{main_ram_base:x} 0x{main_ram_size:x}>;
         }};
@@ -236,20 +271,8 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
         };
 """
 
-    # Clock ----------------------------------------------------------------------------------------
-
-    dts += """
-        clocks {{
-            sys_clk: litex_sys_clk {{
-                #clock-cells = <0>;
-                compatible = "fixed-clock";
-                clock-frequency = <{sys_clk_freq}>;
-            }};
-        }};
-""".format(sys_clk_freq=d["constants"]["config_clock_frequency"])
-
     # Voltage Regulator for LiteSDCard (if applicable) --------------------------------------------
-    if "sdcore" in d["csr_bases"]:
+    if "sdcard_core" in d["csr_bases"]:
         dts += """
         vreg_mmc: vreg_mmc {{
             compatible = "regulator-fixed";
@@ -289,12 +312,23 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
         dts += """
             lintc0: clint@{clint_base:x} {{
                 compatible = "riscv,clint0";
-                interrupts-extended = <&L4 3 &L4 7>;
+                interrupts-extended = <
+                    {cpu_mapping}>;
                 reg = <0x{clint_base:x} 0x10000>;
                 reg-names = "control";
             }};
-""".format(clint_base=d["memories"]["clint"]["base"])
+""".format(
+        clint_base=d["memories"]["clint"]["base"],
+        cpu_mapping =("\n" + " "*20).join(["&L{} 3 &L{} 7".format(cpu, cpu) for cpu in range(ncpus)]))
     if cpu_arch == "riscv":
+        if "rocket" in cpu_name:
+            extra_attr = """
+                reg-names = "control";
+                riscv,max-priority = <7>;
+"""
+        else:
+            extra_attr = ""
+
         dts += """
             intc0: interrupt-controller@{plic_base:x} {{
                 compatible = "sifive,fu540-c000-plic", "sifive,plic-1.0.0";
@@ -305,10 +339,12 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
                 interrupts-extended = <
                     {cpu_mapping}>;
                 riscv,ndev = <32>;
+                {extra_attr}
             }};
 """.format(
         plic_base   =d["memories"]["plic"]["base"],
-        cpu_mapping =("\n" + " "*20).join(["&L{} 11 &L{} 9".format(cpu, cpu) for cpu in range(ncpus)]))
+        cpu_mapping =("\n" + " "*20).join(["&L{} 11 &L{} 9".format(cpu, cpu) for cpu in range(ncpus)]),
+        extra_attr  =extra_attr)
 
     elif cpu_arch == "or1k":
         dts += """
@@ -319,6 +355,29 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
                 status = "okay";
             };
 """
+    if (cpu_arch == "riscv") and ("rocket" in cpu_name):
+        dts += """
+            dbg_ctl: debug-controller@0 {{
+                compatible = "sifive,debug-013", "riscv,debug-013";
+                interrupts-extended = <
+                    {cpu_mapping}>;
+                reg = <0x0 0x1000>;
+                reg-names = "control";
+            }};
+            err_dev: error-device@3000 {{
+                compatible = "sifive,error0";
+                reg = <0x3000 0x1000>;
+            }};
+            ext_it: external-interrupts {{
+                interrupts = <1 2 3 4 5 6 7 8>;
+            }};
+            rom: rom@10000 {{
+                compatible = "sifive,rom0";
+                reg = <0x10000 0x10000>;
+                reg-names = "mem";
+            }};
+""".format(
+        cpu_mapping =("\n" + " "*20).join(["&L{} 0x3F".format(cpu) for cpu in range(ncpus)]))
     # UART -----------------------------------------------------------------------------------------
 
     if "uart" in d["csr_bases"]:
@@ -421,30 +480,30 @@ def generate_dts(d, initrd_start=None, initrd_size=None, initrd=None, root_devic
 
     # SDCard ---------------------------------------------------------------------------------------
 
-    if "sdcore" in d["csr_bases"]:
+    if "sdcard_core" in d["csr_bases"]:
         dts += """
             mmc0: mmc@{mmc_csr_base:x} {{
                 compatible = "litex,mmc";
-                reg = <0x{sdphy_csr_base:x} 0x100>,
-                      <0x{sdcore_csr_base:x} 0x100>,
-                      <0x{sdblock2mem:x} 0x100>,
-                      <0x{sdmem2block:x} 0x100>,
-                      <0x{sdirq:x} 0x100>;
+                reg = <0x{sdcard_phy_csr_base:x} 0x100>,
+                      <0x{sdcard_core_csr_base:x} 0x100>,
+                      <0x{sdcard_block2mem:x} 0x100>,
+                      <0x{sdcard_mem2block:x} 0x100>,
+                      <0x{sdcard_irq:x} 0x100>;
                 reg-names = "phy", "core", "reader", "writer", "irq";
                 clocks = <&sys_clk>;
                 vmmc-supply = <&vreg_mmc>;
                 bus-width = <0x04>;
-                {sdirq_interrupt}
+                {sdcard_irq_interrupt}
                 status = "okay";
             }};
 """.format(
-        mmc_csr_base    = d["csr_bases"]["sdphy"],
-        sdphy_csr_base  = d["csr_bases"]["sdphy"],
-        sdcore_csr_base = d["csr_bases"]["sdcore"],
-        sdblock2mem     = d["csr_bases"]["sdblock2mem"],
-        sdmem2block     = d["csr_bases"]["sdmem2block"],
-        sdirq           = d["csr_bases"]["sdirq"],
-        sdirq_interrupt = "" if polling else "interrupts = <{}>;".format(d["constants"]["sdirq_interrupt"])
+        mmc_csr_base         = d["csr_bases"]["sdcard_phy"],
+        sdcard_phy_csr_base  = d["csr_bases"]["sdcard_phy"],
+        sdcard_core_csr_base = d["csr_bases"]["sdcard_core"],
+        sdcard_block2mem     = d["csr_bases"]["sdcard_block2mem"],
+        sdcard_mem2block     = d["csr_bases"]["sdcard_mem2block"],
+        sdcard_irq           = d["csr_bases"]["sdcard_irq"],
+        sdcard_irq_interrupt = "" if polling else "interrupts = <{}>;".format(d["constants"]["sdcard_irq_interrupt"])
 )
     # Leds -----------------------------------------------------------------------------------------
 

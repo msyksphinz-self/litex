@@ -2,7 +2,7 @@
 # This file is part of LiteX.
 #
 # This file is Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
-# This file is Copyright (c) 2015-2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2018-2019 Antmicro <www.antmicro.com>
 # This file is Copyright (c) 2018 Sergiusz Bazanski <q3k@q3k.org>
 # This file is Copyright (c) 2016-2017 Tim 'mithro' Ansell <mithro@mithis.com>
@@ -86,6 +86,7 @@ class Builder:
 
         # BIOS.
         bios_lto         = False,
+        bios_format      = "integer",
         bios_console     = "full",
 
         # Documentation.
@@ -113,6 +114,7 @@ class Builder:
 
         # BIOS.
         self.bios_lto     = bios_lto
+        self.bios_format  = bios_format
         self.bios_console = bios_console
 
         # Documentation.
@@ -125,6 +127,9 @@ class Builder:
             self.add_software_package(name)
             self.add_software_library(name)
 
+        # JSONs.
+        self.jsons = []
+
     def add_software_package(self, name, src_dir=None):
         if src_dir is None:
             src_dir = os.path.join(soc_directory, "software", name)
@@ -132,6 +137,30 @@ class Builder:
 
     def add_software_library(self, name):
         self.software_libraries.append(name)
+
+    def add_json(self, filename, origin=0, name=""):
+        self.jsons.append((filename, origin, name))
+
+    def _get_json_mem_regions(self):
+        mem_regions = {}
+        for filename, name, origin in self.jsons:
+            _, _, _mem_regions = export.load_csr_json(filename, name, origin)
+            mem_regions.update(_mem_regions)
+        return mem_regions
+
+    def _get_json_constants(self):
+        constants = {}
+        for filename, name, origin in self.jsons:
+            _, _constants, _ = export.load_csr_json(filename, name, origin)
+            constants.update(_constants)
+        return constants
+
+    def _get_json_csr_regions(self):
+        csr_regions = {}
+        for filename, name, origin in self.jsons:
+            _csr_regions, _, _ = export.load_csr_json(filename, name, origin)
+            csr_regions.update(_csr_regions)
+        return csr_regions
 
     def _get_variables_contents(self):
         # Helper.
@@ -145,7 +174,7 @@ class Builder:
                 raise e
 
         # Define packages and libraries.
-        define("PACKAGES",     " ".join(name for name, src_dir in self.software_packages))
+        define("PACKAGES",     " ".join(name    for name, src_dir in self.software_packages))
         define("PACKAGE_DIRS", " ".join(src_dir for name, src_dir in self.software_packages))
         define("LIBS",         " ".join(self.software_libraries))
 
@@ -159,6 +188,7 @@ class Builder:
 
         define("SOC_DIRECTORY",         soc_directory)
         define("PICOLIBC_DIRECTORY",    picolibc_directory)
+        define("PICOLIBC_FORMAT",       self.bios_format)
         define("COMPILER_RT_DIRECTORY", compiler_rt_directory)
         variables_contents.append("export BUILDINC_DIRECTORY")
         define("BUILDINC_DIRECTORY", self.include_dir)
@@ -176,6 +206,11 @@ class Builder:
         # Generate Include/Generated directories.
         _create_dir(self.include_dir)
         _create_dir(self.generated_dir)
+
+        # Integrate JSON files.
+        self.soc.mem_regions.update(self._get_json_mem_regions())
+        self.soc.constants.update(  self._get_json_constants())
+        self.soc.csr_regions.update(self._get_json_csr_regions())
 
         # Generate BIOS files when the SoC uses it.
         if with_bios:
@@ -406,6 +441,7 @@ def builder_args(parser):
     builder_group.add_argument("--doc",                   action="store_true", help="Generate SoC Documentation.")
     bios_group = parser.add_argument_group(title="BIOS options") # FIXME: Move?
     bios_group.add_argument("--bios-lto",     action="store_true", help="Enable BIOS LTO (Link Time Optimization) compilation.")
+    bios_group.add_argument("--bios-format",  default="integer",   help="Select BIOS printf format.",  choices=["integer", "float", "double"])
     bios_group.add_argument("--bios-console", default="full"  ,    help="Select BIOS console config.", choices=["full", "no-history", "no-autocomplete", "lite", "disable"])
 
 def builder_argdict(args):
@@ -424,5 +460,6 @@ def builder_argdict(args):
         "memory_x"         : args.memory_x,
         "generate_doc"     : args.doc,
         "bios_lto"         : args.bios_lto,
+        "bios_format"      : args.bios_format,
         "bios_console"     : args.bios_console,
     }

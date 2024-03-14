@@ -6,9 +6,13 @@
 
 from migen import *
 
+from litex.gen import *
+
 from litex.soc.cores.cpu import CPU
 from litex.soc.interconnect import axi
 
+
+# Zynq MP ------------------------------------------------------------------------------------------
 
 class ZynqMP(CPU):
     variants             = ["standard"]
@@ -27,7 +31,7 @@ class ZynqMP(CPU):
         0x8000_0000: 0x00_4000_0000,
         0xe000_0000: 0xff_2000_0000  # TODO: there are more details here
     }
-    csr_decode           = False # AXI address is decoded in AXI2Wishbone (target level).
+    csr_decode           = True # AXI address is decoded in AXI2Wishbone, offset needs to be added in Software.
 
     @property
     def mem_map(self):
@@ -44,7 +48,7 @@ class ZynqMP(CPU):
         self.memory_buses   = []          # Memory buses (Connected directly to LiteDRAM).
         self.axi_gp_masters = [None] * 3  # General Purpose AXI Masters.
 
-        self.clock_domains.cd_ps = ClockDomain()
+        self.cd_ps = ClockDomain()
 
         self.ps_name = "ps"
         self.ps_tcl = []
