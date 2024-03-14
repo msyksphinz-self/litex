@@ -128,6 +128,7 @@ git_repos = {
     "pythondata-cpu-serv":         GitRepo(url="https://github.com/litex-hub/"),
     "pythondata-cpu-vexriscv":     GitRepo(url="https://github.com/litex-hub/"),
     "pythondata-cpu-vexriscv-smp": GitRepo(url="https://github.com/litex-hub/", clone="recursive"),
+    "pythondata-cpu-scariv":       GitRepo(url="github-msyksphinz:msyksphinz-self/"),
 }
 
 # Installs -----------------------------------------------------------------------------------------
@@ -148,6 +149,7 @@ standard_repos.remove("pythondata-cpu-minerva")
 standard_repos.remove("pythondata-cpu-microwatt")
 standard_repos.remove("pythondata-cpu-picorv32")
 standard_repos.remove("pythondata-cpu-rocket")
+standard_repos.remove("pythondata-cpu-scariv")
 
 # Full: Migen + LiteX + Cores + Software + All CPUs.
 full_repos = list(git_repos.keys())
@@ -478,4 +480,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
